@@ -36,6 +36,10 @@ const CHICKEN_SIZE = 80;
 const OBSTACLE_SIZE = 90;
 const COLLECTIBLE_SIZE = 56;
 
+// Розміри фону (оригінальна картинка 2150 × 932)
+const BACKGROUND_WIDTH = 2150;
+const BACKGROUND_HEIGHT = 932;
+
 // Швидкість гри (трохи нижче середньої)
 const GAME_SPEED = 5;
 
@@ -58,6 +62,7 @@ function App(): React.JSX.Element {
   const [isJumping, setIsJumping] = useState(false);
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [collectibles, setCollectibles] = useState<Collectible[]>([]);
+  const [backgroundX, setBackgroundX] = useState(0);
 
   const gameLoopRef = useRef<NodeJS.Timeout | null>(null);
   const obstacleIdRef = useRef(0);
@@ -82,6 +87,7 @@ function App(): React.JSX.Element {
     setIsJumping(false);
     setObstacles([]);
     setCollectibles([]);
+    setBackgroundX(0);
     obstacleIdRef.current = 0;
     collectibleIdRef.current = 0;
     lastJumpTimeRef.current = 0;
@@ -146,7 +152,19 @@ function App(): React.JSX.Element {
       return;
     }
 
+    // Розраховуємо масштабовану ширину фону
+    const backgroundScale = SCREEN_HEIGHT / BACKGROUND_HEIGHT;
+    const scaledBackgroundWidth = BACKGROUND_WIDTH * backgroundScale;
+
     gameLoopRef.current = setInterval(() => {
+      // Рух фону (повторюється з масштабованою шириною картинки)
+      setBackgroundX(prev => {
+        const newX = prev - GAME_SPEED;
+        // Якщо перше зображення повністю вийшло за екран, скидаємо позицію
+        // Друге зображення вже на позиції newX + scaledBackgroundWidth, тому просто скидаємо на 0
+        return newX <= -scaledBackgroundWidth ? 0 : newX;
+      });
+
       // Рух перешкод
       setObstacles(prev =>
         prev
@@ -197,11 +215,18 @@ function App(): React.JSX.Element {
           const overlapX =
             obstacleRight > chickenLeft && obstacleLeft < chickenRight;
 
-          const chickenBottom = GROUND_Y + chickenY;
+          // Курка має bottom: GROUND_Y і transform: translateY(-chickenY)
+          // Тому візуальна позиція: bottom = GROUND_Y - chickenY
+          const chickenBottom = GROUND_Y - chickenY;
           const chickenTop = chickenBottom - CHICKEN_SIZE;
+          
+          // Перешкода має bottom: GROUND_Y
+          const obstacleBottom = GROUND_Y;
           const obstacleTop = GROUND_Y - OBSTACLE_SIZE;
 
-          const overlapY = chickenBottom > obstacleTop && chickenTop < GROUND_Y;
+          // Зіткнення відбувається, коли курка перетинається з перешкодою по вертикалі
+          // Але НЕ коли курка над перешкодою (chickenBottom <= obstacleTop)
+          const overlapY = chickenBottom > obstacleTop && chickenTop < obstacleBottom;
 
           if (overlapX && overlapY) {
             if (gameLoopRef.current) {
@@ -293,11 +318,28 @@ function App(): React.JSX.Element {
   }
 
   // Екран гри
+  // Розраховуємо масштабовану ширину фону для збереження пропорцій
+  const backgroundScale = SCREEN_HEIGHT / BACKGROUND_HEIGHT;
+  const scaledBackgroundWidth = BACKGROUND_WIDTH * backgroundScale;
+
   return (
     <View style={styles.gameContainer}>
       <StatusBar hidden />
-      {/* Фон */}
-      <Image source={bgDayImg} style={styles.backgroundImage} />
+      {/* Рухомий фон (два зображення для безперервного повторення) */}
+      <Image
+        source={bgDayImg}
+        style={[
+          styles.backgroundImage,
+          {left: backgroundX, width: scaledBackgroundWidth},
+        ]}
+      />
+      <Image
+        source={bgDayImg}
+        style={[
+          styles.backgroundImage,
+          {left: backgroundX + scaledBackgroundWidth, width: scaledBackgroundWidth},
+        ]}
+      />
       <View style={styles.scoreBar}>
         <Text style={styles.scoreText}>Очки: {score}</Text>
         <Text style={styles.scoreBestText}>Рекорд: {bestScore}</Text>
@@ -428,11 +470,10 @@ const styles = StyleSheet.create({
   backgroundImage: {
     position: 'absolute',
     top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
+    // Використовуємо оригінальні розміри картинки
+    // Масштабуємо висоту до екрана, ширина розраховується пропорційно
+    height: SCREEN_HEIGHT,
+    // Ширина встановлюється динамічно в JSX для тайлування
     resizeMode: 'cover',
   },
   scoreBar: {
